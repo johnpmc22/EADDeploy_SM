@@ -1,0 +1,92 @@
+pool:
+  name: Hosted Ubuntu 1604
+steps:
+- task: HelmDeploy@0
+  displayName: 'helm init'
+  inputs:
+    azureSubscription: 'Pay-As-You-Go (116880b6-281d-4a55-8e99-82cce51e6f41)'
+    azureResourceGroup: 'azure-eadca1'
+    kubernetesCluster: eadca1
+    command: init
+
+- task: HelmDeploy@0
+  displayName: 'helm install Istio Custom Resource Definitions (CRDs) '
+  inputs:
+    azureSubscription: 'Pay-As-You-Go (116880b6-281d-4a55-8e99-82cce51e6f41)'
+    azureResourceGroup: 'azure-eadca1'
+    kubernetesCluster: eadca1
+    command: install
+    chartType: FilePath
+    chartPath: 'istio-init'
+    arguments: '--name istio-init --namespace istio-system'
+
+- script: 'sleep 2m'
+  displayName: 'Sleep 2 minutes for ISTIO Cluster to Instantiate'
+
+- task: Kubernetes@1
+  displayName: 'kubectl get'
+  inputs:
+    connectionType: 'Azure Resource Manager'
+    azureSubscriptionEndpoint: 'Pay-As-You-Go (116880b6-281d-4a55-8e99-82cce51e6f41)'
+    azureResourceGroup: 'azure-eadca1'
+    kubernetesCluster: eadca1
+    command: get
+    arguments: 'jobs -n istio-system'
+
+- task: Kubernetes@1
+  displayName: 'kubectl apply grafana'
+  inputs:
+    connectionType: 'Azure Resource Manager'
+    azureSubscriptionEndpoint: 'Pay-As-You-Go (116880b6-281d-4a55-8e99-82cce51e6f41)'
+    azureResourceGroup: 'azure-eadca1'
+    kubernetesCluster: eadca1
+    command: apply
+    useConfigurationFile: true
+    configuration: grafana.yml
+
+- task: Kubernetes@1
+  displayName: 'kubectl apply kiala'
+  inputs:
+    connectionType: 'Azure Resource Manager'
+    azureSubscriptionEndpoint: 'Pay-As-You-Go (116880b6-281d-4a55-8e99-82cce51e6f41)'
+    azureResourceGroup: 'azure-eadca1'
+    kubernetesCluster: eadca1
+    command: apply
+    useConfigurationFile: true
+    configuration: kiali.yml
+
+- task: HelmDeploy@0
+  displayName: 'helm Install Istio components'
+  inputs:
+    azureSubscription: 'Pay-As-You-Go (116880b6-281d-4a55-8e99-82cce51e6f41)'
+    azureResourceGroup: 'azure-eadca1'
+    kubernetesCluster: eadca1
+    namespace: ' istio-system'
+    command: install
+    chartName: istio
+    waitForExecution: false
+    arguments: '--set global.controlPlaneSecurityEnabled=true  --set mixer.adapters.useAdapterCRDs=false  --set grafana.enabled=true --set grafana.security.enabled=true --set tracing.enabled=true --set kiali.enabled=true'
+
+- script: 'sleep 5m'
+  displayName: 'Sleep 5 mins to wait for components to instantiate '
+
+- task: Kubernetes@1
+  displayName: 'kubectl get services'
+  inputs:
+    connectionType: 'Azure Resource Manager'
+    azureSubscriptionEndpoint: 'Pay-As-You-Go (116880b6-281d-4a55-8e99-82cce51e6f41)'
+    azureResourceGroup: 'azure-eadca1'
+    kubernetesCluster: eadca1
+    command: get
+    arguments: 'svc --namespace istio-system --output wide'
+
+- task: Kubernetes@1
+  displayName: 'kubectl get pods'
+  inputs:
+    connectionType: 'Azure Resource Manager'
+    azureSubscriptionEndpoint: 'Pay-As-You-Go (116880b6-281d-4a55-8e99-82cce51e6f41)'
+    azureResourceGroup: 'azure-eadca1'
+    kubernetesCluster: eadca1
+    command: get
+    arguments: 'pods --namespace istio-system'
+
